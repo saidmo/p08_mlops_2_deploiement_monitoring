@@ -1,3 +1,4 @@
+
 # ----------------------------------------------------------------------------
 # Dépendances de DEV / TEST / MONITORING
 # (utilisées en CI et en local, PAS dans l'image de prod)
@@ -7,7 +8,7 @@
 # Tests
 pytest
 pytest-cov     # taux de couverture (demandé par la fiche d'auto-évaluation)
-httpx          # requis par le TestClient de FastAPI, et par Streamlit pour appeler l'API
+httpx2         # utilisé par le TestClient de FastAPI/Starlette (remplace httpx, déprécié), et par Streamlit pour appeler l'API
 
 # Monitoring & data drift
 streamlit

@@ -10,6 +10,12 @@ __pycache__/
 .pytest_cache/
 .ipynb_checkpoints/
 
+# ---- Couverture de tests (pytest-cov) ----
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
 # ---- Environnements virtuels ----
 venv/
 .venv/
@@ -39,6 +45,7 @@ mlruns/
 
 # ---- Logs locaux ----
 *.log
+logs/*.jsonl
 
 # ---- Système d'exploitation ----
 Thumbs.db

@@ -22,6 +22,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Code applicatif + modèle exporté du P06
 COPY app/ ./app/
 COPY model/ ./model/
+# features.py est requis pour désérialiser le pipeline (FunctionTransformer)
+COPY features.py .
 
 # Exécution en utilisateur non-root (bonne pratique sécurité)
 RUN useradd --create-home appuser
