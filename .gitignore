@@ -1,0 +1,50 @@
+# ============================================================
+#  P08 — Déployez et monitorez votre modèle de scoring
+#  .gitignore
+# ============================================================
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# ---- Environnements virtuels ----
+venv/
+.venv/
+env/
+ENV/
+
+# ---- Secrets & configuration locale (NE JAMAIS COMMITER) ----
+.env
+.env.*
+*.key
+*.pem
+
+# ---- Données (volumineuses + potentiellement sensibles) ----
+data/
+*.csv
+*.parquet
+
+# ---- Artefacts MLflow du P06 (n'ont rien à faire dans ce dépôt) ----
+mlflow.db
+mlruns/
+
+# ---- Modèle : on IGNORE tous les .pkl SAUF l'artefact de serving ----
+# Le modèle de prod doit être versionné pour que le build Docker / la CI
+# fonctionnent. On exclut donc explicitement l'artefact unique de la règle.
+*.pkl
+!model/model_credit_scoring.pkl
+
+# ---- Logs locaux ----
+*.log
+
+# ---- Système d'exploitation ----
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# ---- IDE ----
+.vscode/
+.idea/
