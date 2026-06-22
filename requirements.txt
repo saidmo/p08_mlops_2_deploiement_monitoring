@@ -1,0 +1,23 @@
+# ----------------------------------------------------------------------------
+# Dépendances RUNTIME de l'API (ce qui part dans l'image Docker)
+# ----------------------------------------------------------------------------
+fastapi
+uvicorn[standard]
+pydantic
+pandas
+numpy
+
+# IMPORTANT — compatibilité du pickle :
+# scikit-learn et lightgbm DOIVENT être pinnés aux versions utilisées
+# lors de l'entraînement du P06, sinon le chargement de
+# model_credit_scoring.pkl peut échouer ou émettre des warnings de version.
+
+lightgbm==4.6.0
+scikit-learn==1.8.0
+
+# Interface de démonstration (montée dans FastAPI sur /ui — Option A)
+gradio
+
+# Journalisation des prédictions en base de production (PostgreSQL)
+sqlalchemy
+psycopg2-binary

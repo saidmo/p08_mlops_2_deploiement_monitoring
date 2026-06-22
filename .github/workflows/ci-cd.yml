@@ -1,0 +1,76 @@
+name: CI/CD — Credit Scoring API
+
+# Déclenchement : à chaque push sur main (et sur les PR ciblant main)
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  # ──────────────────────────────────────────────────────────────────────
+  # 1) TESTS — exécute pytest. Un service PostgreSQL éphémère est fourni
+  #    pour les tests qui valideront plus tard la journalisation des
+  #    prédictions. L'API doit tolérer l'absence de base (dégradation
+  #    gracieuse) : une prédiction ne doit JAMAIS échouer parce que le log
+  #    a échoué.
+  # ──────────────────────────────────────────────────────────────────────
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: scoring
+          POSTGRES_PASSWORD: scoring
+          POSTGRES_DB: scoring_monitoring
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U scoring"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql+psycopg2://scoring:scoring@localhost:5432/scoring_monitoring
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Run tests
+        run: pytest -v
+
+  # ──────────────────────────────────────────────────────────────────────
+  # 2) BUILD — ne s'exécute que si les tests passent (needs: test).
+  #    Construit l'image Docker pour garantir qu'elle est déployable.
+  # ──────────────────────────────────────────────────────────────────────
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: credit-scoring-api:latest
+
+      

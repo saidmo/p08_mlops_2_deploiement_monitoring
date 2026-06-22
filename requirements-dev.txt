@@ -1,0 +1,13 @@
+# ----------------------------------------------------------------------------
+# Dépendances de DEV / TEST / MONITORING
+# (utilisées en CI et en local, PAS dans l'image de prod)
+# ----------------------------------------------------------------------------
+-r requirements.txt
+
+# Tests
+pytest
+httpx          # requis par le TestClient de FastAPI
+
+# Monitoring & data drift
+streamlit
+evidently
