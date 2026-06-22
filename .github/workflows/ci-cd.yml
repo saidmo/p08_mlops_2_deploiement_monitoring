@@ -9,32 +9,13 @@ on:
 
 jobs:
   # ──────────────────────────────────────────────────────────────────────
-  # 1) TESTS — exécute pytest. Un service PostgreSQL éphémère est fourni
-  #    pour les tests qui valideront plus tard la journalisation des
-  #    prédictions. L'API doit tolérer l'absence de base (dégradation
-  #    gracieuse) : une prédiction ne doit JAMAIS échouer parce que le log
-  #    a échoué.
+  # 1) TESTS — exécute pytest avec le taux de couverture.
+  #    Aucun service externe : les prédictions sont journalisées en JSON
+  #    (JSON Lines) dans un fichier local, donc les tests tournent sans
+  #    dépendance à une base de données.
   # ──────────────────────────────────────────────────────────────────────
   test:
     runs-on: ubuntu-latest
-
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: scoring
-          POSTGRES_PASSWORD: scoring
-          POSTGRES_DB: scoring_monitoring
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U scoring"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-    env:
-      DATABASE_URL: postgresql+psycopg2://scoring:scoring@localhost:5432/scoring_monitoring
 
     steps:
       - uses: actions/checkout@v4
@@ -49,7 +30,7 @@ jobs:
         run: pip install -r requirements-dev.txt
 
       - name: Run tests
-        run: pytest -v
+        run: pytest -v --cov=app --cov-report=term-missing
 
   # ──────────────────────────────────────────────────────────────────────
   # 2) BUILD — ne s'exécute que si les tests passent (needs: test).
@@ -73,4 +54,23 @@ jobs:
           load: true
           tags: credit-scoring-api:latest
 
-      
+      # ── Publication optionnelle vers GitHub Container Registry (GHCR) ──
+      # Pour publier l'image, ajouter en haut du job :
+      #     permissions:
+      #       contents: read
+      #       packages: write
+      # puis décommenter les étapes ci-dessous.
+      #
+      # - name: Log in to GHCR
+      #   uses: docker/login-action@v3
+      #   with:
+      #     registry: ghcr.io
+      #     username: ${{ github.actor }}
+      #     password: ${{ secrets.GITHUB_TOKEN }}
+      #
+      # - name: Build and push
+      #   uses: docker/build-push-action@v6
+      #   with:
+      #     context: .
+      #     push: true
+      #     tags: ghcr.io/${{ github.repository }}:latest

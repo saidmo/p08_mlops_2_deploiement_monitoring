@@ -4,19 +4,20 @@ Mise en production du modèle de scoring crédit développé lors du
 [Projet 06 — Initiez-vous au MLOps](https://github.com/saidmo/p06_mlops_1_mlflow)
 (LightGBM optimisé avec Optuna, AUC-ROC ~0.79, suivi MLflow).
 
-Le contexte métier — fictif — est celui de **Prêt à Dépenser**, dont le
+Le contexte métier est celui de **Prêt à Dépenser**, dont le
 département *Crédit Express* doit traiter en quasi temps réel des
 demandes de crédit à la consommation.
 
 ## Objectifs de ce dépôt
 
-1. Exposer le modèle via une **API REST** (FastAPI) et une **interface
-   de démonstration** (Gradio) — *à venir, Étape 2*.
+1. Exposer le modèle via une **API REST** (FastAPI), consommée par une
+   **interface Streamlit** (scoring + monitoring) — *à venir, Étape 2*.
 2. **Conteneuriser** l'application avec Docker — *à venir, Étape 2*.
 3. Automatiser tests et build via **CI/CD** GitHub Actions — *à venir,
    Étape 2*.
-4. **Journaliser** chaque prédiction en base PostgreSQL et **détecter
-   le data drift** — *à venir, Étape 3*.
+4. **Journaliser** chaque prédiction (inputs, output, latence) via un
+   **logging structuré JSON** et **détecter le data drift** avec
+   Evidently — *à venir, Étape 3*.
 5. **Optimiser** les performances post-déploiement — *à venir, Étape 4*.
 
 ## Structure du dépôt
@@ -28,7 +29,7 @@ demandes de crédit à la consommation.
 │   └── model_credit_scoring.pkl   artefact UNIQUE réutilisé du P06
 ├── features.py             feature engineering partagé train/serving
 ├── tests/                  tests unitaires pytest (Étape 2)
-├── monitoring/             dashboard Streamlit + Evidently (Étape 3)
+├── monitoring/             dashboard Streamlit + Evidently + logs JSON (Étape 3)
 ├── .github/workflows/      pipeline CI/CD
 ├── Dockerfile
 └── requirements*.txt
@@ -49,4 +50,3 @@ demandes de crédit à la consommation.
 
 ## Lancement (à compléter à l'Étape 2)
 
-Sera documenté ici une fois l'API et le conteneur en place.

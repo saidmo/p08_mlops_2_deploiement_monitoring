@@ -15,9 +15,5 @@ numpy
 lightgbm==4.6.0
 scikit-learn==1.8.0
 
-# Interface de démonstration (montée dans FastAPI sur /ui — Option A)
-gradio
-
-# Journalisation des prédictions en base de production (PostgreSQL)
-sqlalchemy
-psycopg2-binary
+# Journalisation structurée des prédictions au format JSON (JSON Lines)
+python-json-logger

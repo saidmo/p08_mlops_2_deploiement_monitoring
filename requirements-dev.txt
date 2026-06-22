@@ -6,7 +6,8 @@
 
 # Tests
 pytest
-httpx          # requis par le TestClient de FastAPI
+pytest-cov     # taux de couverture (demandé par la fiche d'auto-évaluation)
+httpx          # requis par le TestClient de FastAPI, et par Streamlit pour appeler l'API
 
 # Monitoring & data drift
 streamlit
