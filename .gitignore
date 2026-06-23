@@ -29,9 +29,12 @@ ENV/
 *.pem
 
 # ---- Données (volumineuses + potentiellement sensibles) ----
-data/
+# On ignore tout le contenu de data/ ...
+data/*
 *.csv
 *.parquet
+# ... SAUF l'échantillon de référence du monitoring (léger, données publiques)
+!data/reference_sample.parquet
 
 # ---- Artefacts MLflow du P06 (n'ont rien à faire dans ce dépôt) ----
 mlflow.db
