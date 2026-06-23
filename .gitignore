@@ -50,6 +50,9 @@ mlruns/
 *.log
 logs/*.jsonl
 
+# ---- Rapports de monitoring générés (Evidently) ----
+monitoring/reports/
+
 # ---- Système d'exploitation ----
 Thumbs.db
 desktop.ini
