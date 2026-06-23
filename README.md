@@ -15,7 +15,7 @@ demandes de crédit à la consommation.
 3. Automatiser tests et build via **CI/CD** GitHub Actions — ✅ Étape 2.
 4. **Journaliser** chaque prédiction (inputs, output, latence) via un
    **logging structuré JSON** et **détecter le data drift** avec
-   Evidently, visualisé dans un dashboard **Streamlit** — *Étape 3*.
+   Evidently, visualisé dans un dashboard **Streamlit** — ✅ Étape 3.
 5. **Optimiser** les performances post-déploiement — *Étape 4*.
 
 ## Structure du dépôt
@@ -165,9 +165,74 @@ pull requests vers `main`. Il enchaîne deux jobs :
 1. **`test`** — installe les dépendances et exécute `pytest --cov` ;
 2. **`build`** — construit l'image Docker (uniquement si les tests passent).
 
-## Monitoring (Étape 3 — à venir)
+## Monitoring et data drift (Étape 3)
 
-Chaque appel à `/predict` est journalisé dans `logs/predictions.jsonl`
-(une ligne JSON par prédiction : `timestamp`, `inputs`, `proba_defaut`,
-`decision`, `inference_ms`, `latency_ms`). Ce journal alimentera le
-dashboard Streamlit et l'analyse de data drift (Evidently).
+### Solution de stockage des données de production
+
+Chaque appel à `/predict` est journalisé par l'API dans
+`logs/predictions.jsonl` — **une ligne JSON par prédiction** (format JSON
+Lines) contenant : `timestamp`, `request_id`, `model_version`, `inputs`
+(features soumises), `proba_defaut`, `decision`, `seuil`, `inference_ms`,
+`latency_ms`, `http_status`.
+
+Ce choix de **logging structuré JSON en fichier** est volontairement léger
+(aucun serveur de base de données à administrer), suffisant pour un PoC, et
+couvre les deux besoins du monitoring avec un seul enregistrement : les
+**inputs/outputs** pour l'analyse de drift, et les **métriques
+opérationnelles** (latence, temps d'inférence) pour le suivi de performance.
+
+> RGPD : le jeu de données Home Credit est fictif et public. En production
+> réelle, la journalisation des inputs imposerait pseudonymisation,
+> minimisation et durée de conservation limitée.
+
+### Échantillon de référence
+
+`monitoring/build_reference_sample.py` construit la baseline de drift :
+un échantillon **stratifié sur `TARGET`** de 10 000 lignes des données
+d'entraînement, restreint aux 21 features du noyau (alignement direct avec
+ce que l'API journalise). Résultat versionné : `data/reference_sample.parquet`.
+
+```bash
+python monitoring/build_reference_sample.py
+```
+
+### Simulation de trafic de production
+
+`monitoring/simulate_production.py` envoie deux vagues de requêtes à l'API
+(API à lancer au préalable) : une vague **normale** et une vague **dérivée**
+(scénario « récession » : revenus abaissés, crédits/annuités relevés, scores
+externes dégradés) qui provoque un data drift détectable. Les lignes de
+production sont tirées dans le **complément** de la référence (aucun
+recouvrement).
+
+```bash
+# terminal 1
+uvicorn app.main:app --port 8800
+# terminal 2
+python monitoring/simulate_production.py
+```
+
+### Dashboard Streamlit
+
+`monitoring/dashboard_streamlit.py` lit le journal et affiche les indicateurs
+clés, la distribution des scores, la répartition des décisions, la latence et
+le temps d'inférence au fil des requêtes, et le score de défaut dans le temps.
+
+```bash
+streamlit run monitoring/dashboard_streamlit.py
+```
+
+### Analyse de data drift (Evidently)
+
+`monitoring/data_drift_evidently.py` compare la production (extraite du
+journal) à la référence et produit deux rapports HTML dans
+`monitoring/reports/` : référence vs toute la production, et référence vs
+vague dérivée seule.
+
+```bash
+python monitoring/data_drift_evidently.py
+```
+
+L'interprétation détaillée des résultats (features driftées, intensité par
+feature, et le paradoxe du verdict global de drift) est consignée dans
+[`monitoring/ANALYSE_DRIFT.md`](monitoring/ANALYSE_DRIFT.md).
