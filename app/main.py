@@ -85,12 +85,28 @@ app = FastAPI(
 
 
 @app.middleware("http")
-async def add_process_time_header(request: Request, call_next):
-    """Mesure la latence end-to-end (toutes routes) et l'expose en header."""
+async def journaliser_et_chronometrer(request: Request, call_next):
+    """
+    Mesure la latence END-TO-END de la requête (réseau d'entrée, validation,
+    scoring, sérialisation) et journalise les prédictions.
+
+    L'endpoint /predict dépose les éléments à logger dans `request.state` ;
+    ce middleware y ajoute la latence réelle — qu'il est le seul à connaître,
+    puisqu'il enveloppe tout le traitement — puis écrit la ligne JSON.
+    """
     start = time.perf_counter()
     response = await call_next(request)
-    elapsed_ms = (time.perf_counter() - start) * 1000
-    response.headers["X-Process-Time-Ms"] = f"{elapsed_ms:.2f}"
+    latency_ms = (time.perf_counter() - start) * 1000
+
+    response.headers["X-Process-Time-Ms"] = f"{latency_ms:.2f}"
+
+    # Journalise uniquement si l'endpoint a déposé une prédiction à logger
+    record = getattr(request.state, "prediction_log", None)
+    if record is not None:
+        record["latency_ms"] = round(latency_ms, 3)
+        record["http_status"] = response.status_code
+        _log_prediction(record)
+
     return response
 
 
@@ -105,15 +121,17 @@ def health():
 
 
 @app.post("/predict", response_model=PredictionResponse)
-def predict(client: ClientFeatures):
+def predict(client: ClientFeatures, request: Request):
     """
     Score une demande de crédit.
 
     La validation Pydantic (champs requis, plages, types) s'exécute AVANT
     cette fonction : une entrée invalide renvoie automatiquement un 422.
-    """
-    t0 = time.perf_counter()
 
+    L'inférence pure est chronométrée ici ; la latence end-to-end et
+    l'écriture du log sont gérées par le middleware (qui enveloppe tout le
+    traitement de la requête).
+    """
     # Features réellement soumises (noyau + extras éventuels) ; les None sont
     # exclus pour être complétés à NaN par le réalignement côté model.py.
     features = client.model_dump(exclude_none=True)
@@ -122,21 +140,17 @@ def predict(client: ClientFeatures):
     result = model.predict_one(features)
     inference_ms = (time.perf_counter() - t_inf) * 1000
 
-    latency_ms = (time.perf_counter() - t0) * 1000
-
-    _log_prediction(
-        {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "request_id": uuid.uuid4().hex[:12],
-            "model_version": result["model_version"],
-            "inputs": features,
-            "proba_defaut": result["proba_defaut"],
-            "decision": result["decision"],
-            "seuil": result["seuil"],
-            "inference_ms": round(inference_ms, 3),
-            "latency_ms": round(latency_ms, 3),
-            "http_status": 200,
-        }
-    )
+    # Dépose le contenu à journaliser ; le middleware ajoutera latency_ms
+    # et http_status, puis écrira la ligne JSON.
+    request.state.prediction_log = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "request_id": uuid.uuid4().hex[:12],
+        "model_version": result["model_version"],
+        "inputs": features,
+        "proba_defaut": result["proba_defaut"],
+        "decision": result["decision"],
+        "seuil": result["seuil"],
+        "inference_ms": round(inference_ms, 3),
+    }
 
     return PredictionResponse(**result)
