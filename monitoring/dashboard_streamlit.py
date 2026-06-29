@@ -40,7 +40,36 @@ LOG_FILE = ROOT / "logs" / "predictions.jsonl"
 API_URL = os.environ.get("API_URL", "").rstrip("/")
 LOGS_LIMIT = int(os.environ.get("LOGS_LIMIT", "2000"))
 
+# Mot de passe d'accès (facultatif) : fourni via la variable d'environnement
+# DASHBOARD_PASSWORD (definie en "secret" du Space sur Hugging Face). Si elle
+# est absente, le dashboard reste librement accessible (mode developpement).
+DASHBOARD_PASSWORD = os.environ.get("DASHBOARD_PASSWORD", "")
+
 st.set_page_config(page_title="Monitoring — Scoring crédit", layout="wide")
+
+
+def exiger_mot_de_passe() -> None:
+    """Porte d'acces : si DASHBOARD_PASSWORD est definie, exige le bon mot de
+    passe avant d'afficher quoi que ce soit. Sans cette variable, ne fait rien.
+
+    Protection de niveau demonstration (le code du Space est public) : convient
+    pour reserver l'acces a l'evaluateur, pas pour proteger un secret critique.
+    """
+    if not DASHBOARD_PASSWORD:
+        return  # pas de mot de passe configure -> acces libre
+
+    if st.session_state.get("authentifie"):
+        return  # deja valide pour cette session
+
+    st.title("🔒 Monitoring — accès protégé")
+    saisie = st.text_input("Mot de passe", type="password")
+    if saisie:
+        if saisie == DASHBOARD_PASSWORD:
+            st.session_state["authentifie"] = True
+            st.rerun()
+        else:
+            st.error("Mot de passe incorrect.")
+    st.stop()  # bloque tout le reste du dashboard tant que non authentifie
 
 
 def _normaliser(df: pd.DataFrame) -> pd.DataFrame:
@@ -74,6 +103,8 @@ def load_logs() -> pd.DataFrame:
         return load_logs_api(API_URL, LOGS_LIMIT)
     return load_logs_fichier(LOG_FILE)
 
+
+exiger_mot_de_passe()
 
 st.title("📊 Monitoring de l'API de scoring crédit")
 
