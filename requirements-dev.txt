@@ -1,4 +1,3 @@
-
 # ----------------------------------------------------------------------------
 # Dépendances de DEV / TEST / MONITORING
 # (utilisées en CI et en local, PAS dans l'image de prod)
@@ -13,3 +12,4 @@ httpx2         # utilisé par le TestClient de FastAPI/Starlette (remplace httpx
 # Monitoring & data drift
 streamlit
 evidently
+requests       # le dashboard interroge l'endpoint /logs de l'API (mode distant)

@@ -1,0 +1,7 @@
+# Dépendances du dashboard de monitoring (Space Streamlit).
+# Volontairement minimal : ce service n'affiche que des données reçues via
+# l'API /logs. Pas de lightgbm, scikit-learn, ni du modèle .pkl.
+streamlit
+pandas
+numpy
+requests

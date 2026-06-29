@@ -49,9 +49,20 @@ LOG_FILE = LOG_DIR / "predictions.jsonl"
 pred_logger = logging.getLogger("predictions")
 pred_logger.setLevel(logging.INFO)
 pred_logger.propagate = False
+
+
+class _CleanJsonFormatter(JsonFormatter):
+    """JsonFormatter qui n'émet pas le champ `message` (inutile ici : toutes
+    les données utiles passent par `extra`)."""
+
+    def add_fields(self, log_record, record, message_dict):
+        super().add_fields(log_record, record, message_dict)
+        log_record.pop("message", None)
+
+
 if not pred_logger.handlers:  # évite la duplication de handlers au rechargement
     _handler = logging.FileHandler(LOG_FILE, encoding="utf-8")
-    _handler.setFormatter(JsonFormatter("%(message)s"))
+    _handler.setFormatter(_CleanJsonFormatter("%(message)s"))
     pred_logger.addHandler(_handler)
 
 
@@ -63,7 +74,9 @@ def _log_prediction(payload: dict) -> None:
     échouer pour autant (une panne de journalisation ne casse pas le service).
     """
     try:
-        pred_logger.info("prediction", extra=payload)
+        # Chaîne vide : on ne veut PAS de champ "message" parasite dans la
+        # ligne JSON (les données utiles sont passées via `extra`).
+        pred_logger.info("", extra=payload)
     except Exception:  # noqa: BLE001
         logging.getLogger("uvicorn.error").warning(
             "Échec d'écriture du log de prédiction (sans impact sur la réponse)"
@@ -154,3 +167,37 @@ def predict(client: ClientFeatures, request: Request):
     }
 
     return PredictionResponse(**result)
+
+
+@app.get("/logs")
+def logs(limit: int = 1000):
+    """
+    Renvoie les `limit` dernières prédictions journalisées (JSON brut, une
+    liste d'objets), pour alimenter le dashboard de monitoring à distance.
+
+    - `limit` est borné à [1, 5000] pour éviter de renvoyer un volume excessif.
+    - Si le journal n'existe pas encore (API fraîchement démarrée, aucun
+      trafic), renvoie une liste vide plutôt qu'une erreur.
+    - Lecture tolérante : une ligne illisible est ignorée, pas fatale.
+    """
+    import json
+
+    limit = max(1, min(limit, 5000))
+    if not LOG_FILE.exists():
+        return {"count": 0, "predictions": []}
+
+    with LOG_FILE.open(encoding="utf-8") as f:
+        lignes = f.readlines()
+
+    recentes = lignes[-limit:]
+    predictions = []
+    for ligne in recentes:
+        ligne = ligne.strip()
+        if not ligne:
+            continue
+        try:
+            predictions.append(json.loads(ligne))
+        except json.JSONDecodeError:
+            continue  # ligne corrompue : on l'ignore
+
+    return {"count": len(predictions), "predictions": predictions}

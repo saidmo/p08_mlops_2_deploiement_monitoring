@@ -20,6 +20,7 @@ Usage (dans un second terminal, venv activé, à la racine du projet) :
     python monitoring/simulate_production.py
 """
 import json
+import os
 import sys
 import urllib.error
 import urllib.request
@@ -33,7 +34,9 @@ sys.path.insert(0, str(ROOT))
 
 from app.schemas import ClientFeatures  # noqa: E402
 
-API_URL = "http://127.0.0.1:8800"
+# URL de l'API : configurable pour pouvoir amorcer une instance distante
+# (ex. un Space Hugging Face) avec le même script. Défaut = API locale.
+API_URL = os.environ.get("API_URL", "http://127.0.0.1:8800").rstrip("/")
 SOURCE = ROOT / "data" / "p06_df_final.parquet"
 N_PER_WAVE = 500
 SEED = 42
@@ -117,8 +120,13 @@ def main() -> None:
         if status != 200:
             raise RuntimeError
     except Exception:
-        sys.exit("❌ L'API ne répond pas sur http://127.0.0.1:8800. "
-                 "Lance d'abord :  uvicorn app.main:app --port 8800")
+        sys.exit(
+            f"❌ L'API ne répond pas sur {API_URL}.\n"
+            "   • En local : lance d'abord  uvicorn app.main:app --port 8800\n"
+            "   • Pour une API distante : définis API_URL avant de lancer, ex.\n"
+            '     PowerShell :  $env:API_URL = "https://...hf.space"\n'
+            "     cmd        :  set API_URL=https://...hf.space"
+        )
 
     df = pd.read_parquet(SOURCE, columns=CORE_COLS + ["TARGET"])
     df = df[df["TARGET"].notnull()]

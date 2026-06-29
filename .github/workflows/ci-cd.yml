@@ -1,11 +1,14 @@
 name: CI/CD — Credit Scoring API
 
-# Déclenchement : à chaque push sur main (et sur les PR ciblant main)
+# Déclenchement : à chaque push sur main (et sur les PR ciblant main).
+# workflow_dispatch permet aussi de lancer le pipeline manuellement (utile
+# pour rejouer le déploiement lors d'une démonstration).
 on:
   push:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   # ──────────────────────────────────────────────────────────────────────
@@ -74,3 +77,58 @@ jobs:
       #     context: .
       #     push: true
       #     tags: ghcr.io/${{ github.repository }}:latest
+
+  # ──────────────────────────────────────────────────────────────────────
+  # 3) DEPLOY — ne s'exécute QUE si les tests ET le build passent
+  #    (needs: [test, build]), et UNIQUEMENT sur push vers main ou lancement
+  #    manuel (jamais sur une simple PR : on ne déploie pas une branche).
+  #
+  #    Pousse le contenu assemblé (deploy/assemble.py) vers les deux Spaces
+  #    Hugging Face. Chaque Space est un dépôt git : on le clone, on y assemble
+  #    le contenu à jour, on commite et on pousse. HF reconstruit alors l'image.
+  #
+  #    Pré-requis : un secret de dépôt GitHub nommé HF_TOKEN contenant un
+  #    token Hugging Face de type "write".
+  # ──────────────────────────────────────────────────────────────────────
+  deploy:
+    needs: [test, build]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    env:
+      HF_USER: saidmo2
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Configurer git
+        run: |
+          git config --global user.email "actions@github.com"
+          git config --global user.name "GitHub Actions"
+
+      - name: Déployer le Space API
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          git clone "https://${HF_USER}:${HF_TOKEN}@huggingface.co/spaces/${HF_USER}/p08-mlops-deploiement-monitoring-fastapi" space-api
+          python deploy/assemble.py api space-api
+          cd space-api
+          git add -A
+          git commit -m "deploy: API depuis GitHub ${GITHUB_SHA::7}" || echo "Aucun changement a deployer"
+          git push
+
+      - name: Déployer le Space dashboard
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          git clone "https://${HF_USER}:${HF_TOKEN}@huggingface.co/spaces/${HF_USER}/p08-mlops-deploiement-monitoring-streamlit" space-dashboard
+          python deploy/assemble.py dashboard space-dashboard
+          cd space-dashboard
+          git add -A
+          git commit -m "deploy: dashboard depuis GitHub ${GITHUB_SHA::7}" || echo "Aucun changement a deployer"
+          git push
