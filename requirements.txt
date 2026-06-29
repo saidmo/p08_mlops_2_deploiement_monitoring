@@ -4,16 +4,18 @@
 fastapi
 uvicorn[standard]
 pydantic
-pandas
-numpy
-
-# IMPORTANT — compatibilité du pickle :
-# scikit-learn et lightgbm DOIVENT être pinnés aux versions utilisées
-# lors de l'entraînement du P06, sinon le chargement de
-# model_credit_scoring.pkl peut échouer ou émettre des warnings de version.
-
-lightgbm==4.6.0
-scikit-learn==1.8.0
-
-# Journalisation structurée des prédictions au format JSON (JSON Lines)
 python-json-logger
+
+# ----------------------------------------------------------------------------
+# Pile numérique — VERSIONS ÉPINGLÉES pour la reproductibilité
+# ----------------------------------------------------------------------------
+# Ces versions figées garantissent des prédictions IDENTIQUES sur les trois
+# environnements : poste Windows, image Docker et poste macOS. Le pickle
+# model_credit_scoring.pkl a été entraîné/validé avec exactement ces versions
+# (proba de référence obtenue : 0.7765756075). Ne pas modifier sans re-tester
+# la non-régression sur l'ensemble du pipeline.
+numpy==2.4.6
+scipy==1.17.1
+pandas==3.0.3
+scikit-learn==1.8.0
+lightgbm==4.6.0

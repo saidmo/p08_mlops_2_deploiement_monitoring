@@ -1,0 +1,33 @@
+         178032011 function calls (173820011 primitive calls) in 327.355 seconds
+
+   Ordered by: cumulative time
+   List reduced from 925 to 25 due to restriction <25>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+     2000    0.123    0.000  327.749    0.164 C:\projets\p08_mlops_2_deploiement_monitoring\app\model.py:50(predict_one)
+     2000    0.217    0.000  215.245    0.108 c:\projets\p08_mlops_2_deploiement_monitoring\.venv\Lib\site-packages\sklearn\pipeline.py:815(predict_proba)
+14000/4000    0.358    0.000  192.275    0.048 c:\projets\p08_mlops_2_deploiement_monitoring\.venv\Lib\site-packages\sklearn\utils\_set_output.py:314(wrapped)
+     2000    1.273    0.001  130.820    0.065 c:\projets\p08_mlops_2_deploiement_monitoring\.venv\Lib\site-packages\sklearn\compose\_column_transformer.py:1031(transform)
+     2000    0.342    0.000  112.324    0.056 C:\projets\p08_mlops_2_deploiement_monitoring\app\model.py:35(_to_frame)
+     2000    0.158    0.000  108.355    0.054 c:\projets\p08_mlops_2_deploiement_monitoring\.venv\Lib\site-packages\sklearn\compose\_column_transformer.py:829(_call_func_on_transformers)
+     2000    0.100    0.000  106.423    0.053 c:\projets\p08_mlops_2_deploiement_monitoring\.venv\Lib\site-packages\pandas\core\frame.py:702(__init__)
+     2000    0.021    0.000   79.682    0.040 c:\projets\p08_mlops_2_deploiement_monitoring\.venv\Lib\site-packages\sklearn\utils\parallel.py:54(__call__)
+     2000    0.046    0.000   79.636    0.040 c:\projets\p08_mlops_2_deploiement_monitoring\.venv\Lib\site-packages\joblib\parallel.py:1969(__call__)
+    10000    0.113    0.000   79.434    0.008 c:\projets\p08_mlops_2_deploiement_monitoring\.venv\Lib\site-packages\joblib\parallel.py:1888(_get_sequential_output)
+     6000    0.653    0.000   79.245    0.013 c:\projets\p08_mlops_2_deploiement_monitoring\.venv\Lib\site-packages\sklearn\utils\parallel.py:140(__call__)
+     6000    0.072    0.000   77.044    0.013 c:\projets\p08_mlops_2_deploiement_monitoring\.venv\Lib\site-packages\sklearn\pipeline.py:1442(_transform_one)
+     2000    0.071    0.000   74.110    0.037 c:\projets\p08_mlops_2_deploiement_monitoring\.venv\Lib\site-packages\pandas\core\internals\construction.py:96(arrays_to_mgr)
+     4000    0.180    0.000   71.146    0.018 c:\projets\p08_mlops_2_deploiement_monitoring\.venv\Lib\site-packages\sklearn\pipeline.py:1002(transform)
+     4000    0.685    0.000   66.746    0.017 c:\projets\p08_mlops_2_deploiement_monitoring\.venv\Lib\site-packages\sklearn\preprocessing\_function_transformer.py:237(transform)
+     2000    6.715    0.003   62.981    0.031 c:\projets\p08_mlops_2_deploiement_monitoring\.venv\Lib\site-packages\pandas\core\internals\construction.py:553(_homogenize)
+     4000    0.020    0.000   61.030    0.015 c:\projets\p08_mlops_2_deploiement_monitoring\.venv\Lib\site-packages\sklearn\preprocessing\_function_transformer.py:377(_transform)
+     2000    0.421    0.000   61.010    0.031 C:\projets\p08_mlops_2_deploiement_monitoring\features.py:52(add_application_features)
+  1402000   18.385    0.000   55.622    0.000 c:\projets\p08_mlops_2_deploiement_monitoring\.venv\Lib\site-packages\pandas\core\construction.py:531(sanitize_array)
+    10000    0.201    0.000   42.948    0.004 c:\projets\p08_mlops_2_deploiement_monitoring\.venv\Lib\site-packages\sklearn\utils\validation.py:2793(validate_data)
+    74000    2.320    0.000   39.459    0.001 c:\projets\p08_mlops_2_deploiement_monitoring\.venv\Lib\site-packages\sklearn\utils\validation.py:725(check_array)
+41604001/41558001   20.589    0.000   37.093    0.000 {built-in method builtins.isinstance}
+     4000    0.373    0.000   35.278    0.009 c:\projets\p08_mlops_2_deploiement_monitoring\.venv\Lib\site-packages\sklearn\impute\_base.py:595(transform)
+     4000    0.092    0.000   33.740    0.008 c:\projets\p08_mlops_2_deploiement_monitoring\.venv\Lib\site-packages\sklearn\impute\_base.py:330(_validate_input)
+    70000    0.792    0.000   32.998    0.000 c:\projets\p08_mlops_2_deploiement_monitoring\.venv\Lib\site-packages\sklearn\utils\_indexing.py:265(_safe_indexing)
+
+

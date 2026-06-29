@@ -9,6 +9,7 @@ réutilisent ensuite l'objet `PIPELINE` déjà en mémoire.
 from pathlib import Path
 import pickle
 
+import numpy as np
 import pandas as pd
 
 # Le pipeline contient un FunctionTransformer qui référence
@@ -31,20 +32,45 @@ SEUIL         = float(_model_data["seuil"])
 MODEL_VERSION = _model_data.get("modele_version", "inconnue")
 AUC_ROC       = _model_data.get("auc_roc")
 
+# --- Optimisation de la latence unitaire (Étape 4) -------------------------
+# Le profiling a montré que ~30 % du temps d'une prédiction unitaire partait
+# dans la CONSTRUCTION du DataFrame (pd.DataFrame([...]).reindex sur 658
+# colonnes : pandas valide et convertit chaque colonne). On évite ce coût en
+# pré-allouant UN template (une ligne, 658 colonnes, dtypes corrects) construit
+# une seule fois ici, puis copié et rempli à chaque requête.
+#
+# Gain mesuré : ~6 % (x86) à ~10 % (Apple Silicon), SANS aucune régression
+# (probas strictement identiques à l'ancienne construction). Voir
+# optimization/RAPPORT_OPTIMISATION.md.
+_COLSET = set(INPUT_COLS)
+# Colonnes catégorielles -> dtype object obligatoire dans le template, sinon
+# pandas refuse d'y écrire une chaîne (colonnes float par défaut).
+_CAT_COLS = set(_model_data.get("binary_cols", [])) | set(_model_data.get("multi_cols", []))
+
+_TEMPLATE = pd.DataFrame([{c: np.nan for c in INPUT_COLS}])
+for _c in _CAT_COLS:
+    if _c in _TEMPLATE.columns:
+        _TEMPLATE[_c] = _TEMPLATE[_c].astype("object")
+
 
 def _to_frame(features_dict: dict) -> pd.DataFrame:
     """
     Construit un DataFrame d'UNE ligne aligné EXACTEMENT sur INPUT_COLS :
 
-    - colonnes manquantes      -> NaN (imputées par le pipeline / gérées par LGBM)
-    - colonnes inattendues      -> ignorées
-    - ordre des colonnes        -> identique à l'entraînement (garanti par reindex)
+    - colonnes manquantes  -> NaN (imputées par le pipeline / gérées par LGBM)
+    - colonnes inattendues  -> ignorées
+    - ordre des colonnes    -> identique à l'entraînement
 
-    C'est ce réalignement qui rend l'API robuste : l'appelant n'envoie que
-    les features dont il dispose, le serveur complète le reste.
+    Implémentation optimisée : on copie le template pré-alloué (dtypes déjà
+    corrects) et on n'écrit que les valeurs fournies, au lieu de reconstruire
+    un DataFrame de 658 colonnes à chaque appel. La copie par requête garantit
+    l'absence d'effet de bord entre requêtes concurrentes (thread-safe).
     """
-    df = pd.DataFrame([features_dict])
-    return df.reindex(columns=INPUT_COLS)
+    df = _TEMPLATE.copy()
+    for cle, valeur in features_dict.items():
+        if cle in _COLSET:
+            df.at[0, cle] = valeur
+    return df
 
 
 def predict_one(features_dict: dict) -> dict:
