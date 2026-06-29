@@ -46,6 +46,11 @@ mlruns/
 *.pkl
 !model/model_credit_scoring.pkl
 
+# ---- Artefact ONNX : optimisation ÉTUDIÉE PUIS REJETÉE (régression de
+# précision des arbres en float32). Non utilisé en production, régénérable
+# via optimization/export_onnx.py. Cf. optimization/RAPPORT_OPTIMISATION.md.
+*.onnx
+
 # ---- Logs locaux ----
 *.log
 logs/*.jsonl
@@ -61,3 +66,6 @@ desktop.ini
 # ---- IDE ----
 .vscode/
 .idea/
+
+# ---- Archive et old scripts ----
+archive/

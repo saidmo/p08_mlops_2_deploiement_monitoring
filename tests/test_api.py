@@ -110,3 +110,35 @@ def test_predict_champ_requis_absent(champ_requis):
     payload = {k: v for k, v in VALID_PAYLOAD.items() if k != champ_requis}
     r = client.post("/predict", json=payload)
     assert r.status_code == 422
+
+
+# --------------------------------------------------------------------------
+# /logs
+# --------------------------------------------------------------------------
+def test_logs_structure():
+    """GET /logs renvoie un objet { count, predictions } cohérent."""
+    r = client.get("/logs")
+    assert r.status_code == 200
+    body = r.json()
+    assert set(body.keys()) == {"count", "predictions"}
+    assert isinstance(body["predictions"], list)
+    assert body["count"] == len(body["predictions"])
+
+
+def test_logs_reflete_une_prediction():
+    """Après un /predict, la dernière entrée de /logs doit le refléter."""
+    client.post("/predict", json=VALID_PAYLOAD)
+    r = client.get("/logs", params={"limit": 5})
+    body = r.json()
+    assert body["count"] >= 1
+    derniere = body["predictions"][-1]
+    # Les champs clés journalisés doivent être présents
+    for champ in ("proba_defaut", "decision", "seuil", "inputs", "latency_ms"):
+        assert champ in derniere
+
+
+def test_logs_limit_borne():
+    """Le paramètre limit est borné : une valeur absurde ne fait pas planter."""
+    r = client.get("/logs", params={"limit": 999999})
+    assert r.status_code == 200
+    assert r.json()["count"] <= 5000

@@ -16,7 +16,8 @@ demandes de crédit à la consommation.
 4. **Journaliser** chaque prédiction (inputs, output, latence) via un
    **logging structuré JSON** et **détecter le data drift** avec
    Evidently, visualisé dans un dashboard **Streamlit** — ✅ Étape 3.
-5. **Optimiser** les performances post-déploiement — *Étape 4*.
+5. **Optimiser** les performances post-déploiement (profiling +
+   stratégies testées) — ✅ Étape 4.
 
 ## Structure du dépôt
 
@@ -70,8 +71,17 @@ pip install -r requirements.txt        # pour lancer l'API
 pip install -r requirements-dev.txt    # pour tests + monitoring
 ```
 
-> Les versions de `scikit-learn` et `lightgbm` sont épinglées dans
-> `requirements.txt` pour garantir la compatibilité du pickle du modèle.
+> Les versions de la pile numérique (`numpy`, `scipy`, `pandas`,
+> `scikit-learn`, `lightgbm`) sont épinglées dans `requirements.txt` pour
+> garantir des prédictions identiques entre postes et image Docker, et la
+> compatibilité du pickle du modèle.
+
+> **OpenMP (requis par LightGBM) selon la plateforme :**
+> - **Windows** : rien à installer, OpenMP est embarqué avec le paquet
+>   LightGBM ;
+> - **Linux / Docker** : le paquet `libgomp1` (installé dans l'image) ;
+> - **macOS** : `libomp`, à installer via Homebrew — `brew install libomp` —
+>   sans quoi l'import de LightGBM échoue (`Library not loaded: libomp.dylib`).
 
 ## Lancer l'API
 
@@ -153,9 +163,10 @@ docker build -t credit-scoring-api .
 docker run -p 8800:8800 credit-scoring-api
 ```
 
-L'API est ensuite disponible sur <http://localhost:8800>. L'image installe
-`libgomp1` (requis par LightGBM), embarque `features.py` (nécessaire à la
-désérialisation du pipeline) et s'exécute en utilisateur non-root.
+L'API est ensuite disponible sur <http://localhost:8800>. L'image (basée sur
+Debian) installe `libgomp1`, le paquet **Linux** fournissant OpenMP requis par
+LightGBM, embarque `features.py` (nécessaire à la désérialisation du pipeline)
+et s'exécute en utilisateur non-root.
 
 ## Intégration continue (CI/CD)
 
@@ -224,15 +235,114 @@ streamlit run monitoring/dashboard_streamlit.py
 
 ### Analyse de data drift (Evidently)
 
-`monitoring/data_drift_evidently.py` compare la production (extraite du
-journal) à la référence et produit deux rapports HTML dans
-`monitoring/reports/` : référence vs toute la production, et référence vs
-vague dérivée seule.
+Deux supports complémentaires couvrent l'analyse de dérive :
 
-```bash
-python monitoring/data_drift_evidently.py
-```
+- **Notebook** [`monitoring/analyse_data_drift.ipynb`](monitoring/analyse_data_drift.ipynb)
+  — le livrable d'analyse : narratif, exécutable, il charge la production
+  (depuis le journal), lance Evidently et **affiche les rapports de drift en
+  ligne**, suivis de l'interprétation. C'est le support de présentation.
+- **Script** `monitoring/data_drift_evidently.py` — la version automatisable de
+  la même analyse, exécutable en ligne de commande, qui produit deux rapports
+  HTML dans `monitoring/reports/` (référence vs toute la production, et vs vague
+  dérivée seule) :
 
-L'interprétation détaillée des résultats (features driftées, intensité par
-feature, et le paradoxe du verdict global de drift) est consignée dans
+  ```bash
+  python monitoring/data_drift_evidently.py
+  ```
+
+  Ce script est la brique réutilisable pour **industrialiser la surveillance** :
+  on pourrait le brancher sur une tâche planifiée (cron, GitHub Actions
+  programmé) régénérant les rapports à intervalle régulier, avec un seuil
+  d'alerte **par feature** (et non sur le verdict global — voir le paradoxe
+  ci-dessous).
+
+L'interprétation détaillée (features driftées, intensité par feature, et le
+**paradoxe du verdict global** de drift) est consignée à la fois dans le
+notebook et dans
 [`monitoring/ANALYSE_DRIFT.md`](monitoring/ANALYSE_DRIFT.md).
+
+## Optimisation et performance (Étape 4)
+
+Démarche complète d'analyse et d'optimisation de la latence d'inférence,
+détaillée dans
+[`optimization/RAPPORT_OPTIMISATION.md`](optimization/RAPPORT_OPTIMISATION.md).
+
+### Le pipeline de prédiction (où chercher les goulots d'étranglement)
+
+![Pipeline de scoring crédit](optimization/pipeline_scoring.png)
+
+Une prédiction enchaîne quatre traitements, du client à la décision :
+
+1. **`_to_frame`** met les features reçues en forme de DataFrame (658 colonnes) ;
+2. le **`FunctionTransformer`** ajoute 9 ratios métier (658 → 667) ;
+3. le **`ColumnTransformer`** impute et encode les catégorielles, laisse passer
+   le numérique (667 → 790) ;
+4. le **`LGBMClassifier`** produit la probabilité, comparée au seuil 0,49.
+
+Le profiling a chiffré le coût de chacun (client noyau) : prétraitement ~55 %,
+feature engineering ~25 %, arbre LightGBM ~10 %, construction du DataFrame ~8 %.
+**Le modèle lui-même ne pèse donc qu'~10 %** : le levier d'optimisation est le
+*framework* (pandas/sklearn) autour du modèle, pas le modèle.
+
+### Profiling
+
+`optimization/profile_inference.py` mesure de deux manières complémentaires :
+
+- une **décomposition en 4 blocs** chronométrés séparément (les pourcentages
+  ci-dessus) ;
+- un passage **`cProfile`**, le profileur intégré de Python : il instrumente
+  chaque appel de fonction et compte combien de fois et combien de temps chacune
+  est exécutée. C'est lui qui a révélé l'origine de l'overhead — des fonctions
+  de validation appelées des millions de fois (`isinstance`, `sanitize_array`),
+  c'est-à-dire le coût caché de pandas/sklearn travaillant ligne par ligne.
+
+### Stratégies testées et arbitrages
+
+- **Optimisation de code — retenue.** La construction du DataFrame d'entrée est
+  remplacée par la copie d'un **template pré-alloué** (intégré dans `_to_frame`,
+  `app/model.py`). Gain : +6 % (x86) à +10 % (Apple Silicon), **zéro
+  régression** (probas identiques). Le banc d'essai `benchmark_optim.py`
+  mesure le gain et vérifie la non-régression.
+- **ONNX Runtime — testée puis rejetée sur preuve** (voir ci-dessous).
+- **Quantification — inadaptée** à un modèle d'arbres (technique de réseaux de
+  neurones ; sans objet pour des comparaisons de seuils).
+- **Matériel — mesuré** : le même code est ~6–8× plus rapide sur Apple Silicon
+  que sur x86 (un levier « hardware » bien réel pour le choix de la machine
+  hôte du conteneur).
+
+### À propos d'ONNX (principe et démarche)
+
+**Principe.** ONNX est un format standard pour décrire un modèle de façon
+portable ; **ONNX Runtime** l'exécute ensuite en code optimisé (C++), sans
+l'overhead Python. L'idée était de convertir tout le pipeline (prétraitement +
+arbre) en ONNX pour supprimer le coût pandas/sklearn — convertir le seul arbre
+(~10 %) aurait été inutile.
+
+**Démarche d'investigation.** On a procédé en trois temps : *inspecter* la
+structure exacte du pipeline (types et ordre des 667 colonnes, sorties du
+préprocesseur), *convertir* le pipeline en ONNX (en levant plusieurs obstacles
+de l'outil : un `FunctionTransformer` non convertible sorti du graphe,
+l'imputation des chaînes traitée en amont, des questions de version et de
+renommage de colonnes), puis *vérifier la non-régression* en comparant, sur des
+centaines de clients, les probabilités ONNX aux probabilités d'origine.
+
+**Verdict : rejet.** La conversion réussit, mais la vérification révèle des
+écarts trop importants et des **bascules de décision** autour du seuil 0,49. La
+cause est documentée : les arbres LightGBM utilisent des seuils en double
+précision (float64), alors que l'opérateur d'arbres d'ONNX ne travaille qu'en
+float32 — la troncature fait basculer du mauvais côté les clients proches d'une
+frontière. Pour un modèle de scoring crédit, une décision qui change à cause
+d'un artefact de conversion est inacceptable (reproductibilité, gouvernance).
+La vérification de non-régression a donc joué son rôle de garde-fou.
+
+### En résumé
+
+La vérification de non-régression est systématique : toute optimisation doit
+produire des probabilités identiques au pipeline d'origine (proba de référence
+0,7765756075). **Une seule optimisation est appliquée — le template** ; les
+autres pistes sont écartées avec justification. Le modèle de production reste le
+pipeline scikit-learn d'origine, précédé du seul `_to_frame` optimisé.
+
+Le dossier `optimization/` contient : `profile_inference.py` (profiling),
+`benchmark_optim.py` (banc d'essai), `RAPPORT_OPTIMISATION.md` (rapport
+détaillé) et `pipeline_scoring.svg/.png` (le schéma ci-dessus).
