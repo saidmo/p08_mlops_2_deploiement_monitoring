@@ -1,8 +1,7 @@
 """
 monitoring/dashboard_streamlit.py
 
-Dashboard de monitoring de l'API de scoring crédit. Lit le journal des
-prédictions (logs/predictions.jsonl) produit par l'API et affiche :
+Dashboard de monitoring de l'API de scoring crédit. Affiche :
 
   • des indicateurs clés (volume, latence, temps d'inférence, taux de refus) ;
   • la distribution des scores prédits ;
@@ -11,48 +10,103 @@ prédictions (logs/predictions.jsonl) produit par l'API et affiche :
   • le score de défaut au fil des requêtes (révèle un éventuel drift de score) ;
   • un volet opérationnel (latence p95 / max, taux d'erreur).
 
-Le dashboard est autonome : il ne lit que le journal, ne charge pas le modèle.
+Source des données — deux modes, selon la variable d'environnement API_URL :
+  • API_URL définie  -> appelle l'endpoint {API_URL}/logs (mode distant,
+                        utilisé en ligne : le dashboard et l'API sont deux
+                        services séparés) ;
+  • API_URL absente  -> lit le fichier local logs/predictions.jsonl
+                        (mode développement, sans API à interroger).
+
+Le dashboard est autonome : il ne charge jamais le modèle.
 
 Usage (venv activé, à la racine du projet) :
+    # mode fichier local
     streamlit run monitoring/dashboard_streamlit.py
+    # mode API distante (exemple en local)
+    API_URL=http://127.0.0.1:8800 streamlit run monitoring/dashboard_streamlit.py
 """
+import os
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import requests
 import streamlit as st
 
 ROOT = Path(__file__).resolve().parent.parent
 LOG_FILE = ROOT / "logs" / "predictions.jsonl"
 
+# Source des données : API distante si API_URL est définie, sinon fichier local.
+API_URL = os.environ.get("API_URL", "").rstrip("/")
+LOGS_LIMIT = int(os.environ.get("LOGS_LIMIT", "2000"))
+
 st.set_page_config(page_title="Monitoring — Scoring crédit", layout="wide")
 
 
-def load_logs(path: Path) -> pd.DataFrame:
-    if not path.exists():
-        return pd.DataFrame()
-    df = pd.read_json(path, lines=True)
+def _normaliser(df: pd.DataFrame) -> pd.DataFrame:
+    """Tri chronologique commun aux deux sources."""
     if "timestamp" in df.columns:
         df["timestamp"] = pd.to_datetime(df["timestamp"])
         df = df.sort_values("timestamp").reset_index(drop=True)
     return df
 
 
+def load_logs_fichier(path: Path) -> pd.DataFrame:
+    """Mode développement : lit le journal local."""
+    if not path.exists():
+        return pd.DataFrame()
+    return _normaliser(pd.read_json(path, lines=True))
+
+
+def load_logs_api(base_url: str, limit: int) -> pd.DataFrame:
+    """Mode distant : interroge GET {base_url}/logs."""
+    r = requests.get(f"{base_url}/logs", params={"limit": limit}, timeout=10)
+    r.raise_for_status()
+    predictions = r.json().get("predictions", [])
+    if not predictions:
+        return pd.DataFrame()
+    return _normaliser(pd.DataFrame(predictions))
+
+
+def load_logs() -> pd.DataFrame:
+    """Charge les données depuis la source configurée (API ou fichier)."""
+    if API_URL:
+        return load_logs_api(API_URL, LOGS_LIMIT)
+    return load_logs_fichier(LOG_FILE)
+
+
 st.title("📊 Monitoring de l'API de scoring crédit")
 
-col_refresh, _ = st.columns([1, 6])
+source_label = f"API distante ({API_URL})" if API_URL else "fichier local"
+col_refresh, col_src = st.columns([1, 6])
 if col_refresh.button("🔄 Rafraîchir"):
     st.rerun()
+col_src.caption(f"Source des données : **{source_label}**")
 
-df = load_logs(LOG_FILE)
+try:
+    df = load_logs()
+except requests.exceptions.RequestException as e:
+    st.error(
+        f"Impossible de joindre l'API à `{API_URL}`.\n\n"
+        f"Détail : {e}\n\n"
+        "Vérifie que l'API est démarrée et accessible, puis rafraîchis."
+    )
+    st.stop()
 
 if df.empty:
-    st.warning(
-        "Aucune prédiction journalisée pour l'instant.\n\n"
-        "Lance l'API puis la simulation :\n"
-        "1. `uvicorn app.main:app --port 8800`\n"
-        "2. `python monitoring/simulate_production.py`"
-    )
+    if API_URL:
+        st.warning(
+            "L'API est joignable mais n'a encore journalisé aucune prédiction.\n\n"
+            "Envoie du trafic vers l'API (puis rafraîchis) :\n"
+            f"`API_URL={API_URL} python monitoring/simulate_production.py`"
+        )
+    else:
+        st.warning(
+            "Aucune prédiction journalisée pour l'instant.\n\n"
+            "Lance l'API puis la simulation :\n"
+            "1. `uvicorn app.main:app --port 8800`\n"
+            "2. `python monitoring/simulate_production.py`"
+        )
     st.stop()
 
 seuil = float(df["seuil"].iloc[0]) if "seuil" in df.columns else 0.49
