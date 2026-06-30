@@ -18,6 +18,8 @@ demandes de crédit à la consommation.
    Evidently, visualisé dans un dashboard **Streamlit** — ✅ Étape 3.
 5. **Optimiser** les performances post-déploiement (profiling +
    stratégies testées) — ✅ Étape 4.
+6. **Déployer dans le cloud** l'API et le dashboard (Hugging Face Spaces),
+   avec déploiement continu depuis GitHub — ✅.
 
 ## Structure du dépôt
 
@@ -32,9 +34,14 @@ demandes de crédit à la consommation.
 ├── features.py             feature engineering partagé train/serving
 ├── tests/                  tests unitaires pytest (TestClient)
 ├── monitoring/             dashboard Streamlit + Evidently + logs JSON (Étape 3)
+├── optimization/           profiling, benchmark, rapport et schéma (Étape 4)
+├── deploy/                 contenu dédié aux Spaces Hugging Face + assemble.py
+│   ├── hf-api/             Dockerfile + README (metadata HF) du Space API
+│   ├── hf-dashboard/       Dockerfile + README + requirements du Space dashboard
+│   └── assemble.py         prépare le contenu à pousser vers chaque Space
 ├── logs/
 │   └── predictions.jsonl   journal des prédictions (généré au runtime)
-├── .github/workflows/      pipeline CI/CD
+├── .github/workflows/      pipeline CI/CD (test → build → deploy)
 ├── Dockerfile
 ├── pytest.ini
 ├── requirements.txt        dépendances runtime de l'API
@@ -168,13 +175,43 @@ Debian) installe `libgomp1`, le paquet **Linux** fournissant OpenMP requis par
 LightGBM, embarque `features.py` (nécessaire à la désérialisation du pipeline)
 et s'exécute en utilisateur non-root.
 
-## Intégration continue (CI/CD)
+## Intégration continue et déploiement (CI/CD)
 
 Le workflow `.github/workflows/ci-cd.yml` se déclenche sur les push et les
-pull requests vers `main`. Il enchaîne deux jobs :
+pull requests vers `main`. Il enchaîne trois jobs :
 
 1. **`test`** — installe les dépendances et exécute `pytest --cov` ;
-2. **`build`** — construit l'image Docker (uniquement si les tests passent).
+2. **`build`** — construit l'image Docker (uniquement si les tests passent) ;
+3. **`deploy`** — pousse le contenu vers les deux Spaces Hugging Face
+   (uniquement sur `main`, après `test` et `build`). Voir ci-dessous.
+
+## Déploiement cloud (Hugging Face Spaces)
+
+L'API et le dashboard sont déployés comme **deux Spaces Docker indépendants**
+qui communiquent par HTTP — une approche microservices : chacun se déploie et
+se met à l'échelle séparément.
+
+- **API** : `https://saidmo2-p08-mlops-deploiement-monitoring-fastapi.hf.space`
+- **Dashboard** : `https://saidmo2-p08-mlops-deploiement-monitoring-streamlit.hf.space`
+  (le dashboard interroge l'API distante via `GET /logs` ; accès protégé par
+  mot de passe via la variable secrète `DASHBOARD_PASSWORD`).
+
+Le dossier `deploy/` contient le contenu propre à chaque Space (Dockerfile sur
+le port 7860, README à metadata HF) et le script `deploy/assemble.py`, qui
+assemble le contenu à pousser. Ce **même script** est utilisé en local et par
+la CI/CD, garantissant un déploiement identique dans les deux cas :
+
+```bash
+# Déploiement manuel d'un Space (exemple pour l'API)
+git clone https://huggingface.co/spaces/saidmo2/p08-mlops-deploiement-monitoring-fastapi ../space-api
+python deploy/assemble.py api ../space-api
+cd ../space-api && git add -A && git commit -m "deploy" && git push
+```
+
+En automatique, le job `deploy` du workflow fait la même chose à chaque push
+sur `main`, en s'authentifiant auprès de Hugging Face via le secret GitHub
+`HF_TOKEN`. Le système de fichiers d'un Space étant éphémère, les journaux
+sont réinitialisés à chaque redémarrage (limite assumée du PoC).
 
 ## Monitoring et data drift (Étape 3)
 
@@ -225,11 +262,23 @@ python monitoring/simulate_production.py
 
 ### Dashboard Streamlit
 
-`monitoring/dashboard_streamlit.py` lit le journal et affiche les indicateurs
-clés, la distribution des scores, la répartition des décisions, la latence et
-le temps d'inférence au fil des requêtes, et le score de défaut dans le temps.
+`monitoring/dashboard_streamlit.py` affiche les indicateurs clés, la
+distribution des scores, la répartition des décisions, la latence et le temps
+d'inférence au fil des requêtes, et le score de défaut dans le temps.
+
+Sa source de données est configurable par variable d'environnement :
+- **`API_URL` absente** → lit le journal local `logs/predictions.jsonl` (dev) ;
+- **`API_URL` définie** → interroge l'API distante via `GET /logs` (déploiement).
+
+Une variable `DASHBOARD_PASSWORD` (facultative) protège l'accès par mot de
+passe lorsqu'elle est définie (utilisée en secret du Space).
 
 ```bash
+# Mode local (fichier)
+streamlit run monitoring/dashboard_streamlit.py
+
+# Mode API distante (PowerShell)
+$env:API_URL = "https://saidmo2-p08-mlops-deploiement-monitoring-fastapi.hf.space"
 streamlit run monitoring/dashboard_streamlit.py
 ```
 
